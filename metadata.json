@@ -1,0 +1,6 @@
+{
+  "name": "SHOP TIME MASTER",
+  "description": "Personal Business Time & Productivity Tracker for shop owners — offline-first manual & geofence tracking, outside time reason analytics, BDT revenue & profit per hour, smart leakage coach, and daily journal.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
