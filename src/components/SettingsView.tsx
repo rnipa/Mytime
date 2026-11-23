@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
   Bell,
+  Check,
+  CheckCircle2,
+  Clock,
   Code2,
   Compass,
   DatabaseBackup,
@@ -8,8 +11,10 @@ import {
   Lock,
   MapPin,
   Moon,
+  Plus,
   Shield,
   Sliders,
+  Sparkles,
   Sun,
   Trash2,
   Upload,
@@ -25,8 +30,10 @@ import {
 import { downloadTextFile } from "../engine/exporter";
 import {
   AppPreferences,
+  GoalSettings,
   NotificationSetting,
   NotificationType,
+  OutsideReason,
   Shop,
 } from "../types/domain";
 import { formatNumber, hashPin } from "../utils/dhakaTime";
@@ -46,14 +53,16 @@ const NOTIFICATION_LABELS: Record<NotificationType, { bn: string; en: string }> 
 export const SettingsView: React.FC<{
   shop: Shop | null;
   prefs: AppPreferences;
+  goalSettings: GoalSettings;
   notifications: NotificationSetting[];
+  reasons: OutsideReason[];
   onRefresh: () => Promise<void>;
-}> = ({ shop, prefs, notifications, onRefresh }) => {
+}> = ({ shop, prefs, goalSettings, notifications, reasons, onRefresh }) => {
   const lang = prefs.language;
   const nf = prefs.numberFormat;
 
-  const [subTab, setSubTab] = useState<"GENERAL" | "LOCATION" | "NOTIFICATIONS" | "BACKUP" | "ANDROID">(
-    "GENERAL"
+  const [subTab, setSubTab] = useState<"GOALS" | "GENERAL" | "LOCATION" | "NOTIFICATIONS" | "BACKUP" | "ANDROID">(
+    "GOALS"
   );
 
   // Shop location form
@@ -84,6 +93,57 @@ export const SettingsView: React.FC<{
     sizeBytes: number;
     filename: string;
   } | null>(null);
+
+  // Working Hours & Goals form
+  const [dailyHours, setDailyHours] = useState(String(Math.round((goalSettings.dailyMinutes / 60) * 10) / 10));
+  const [weeklyHours, setWeeklyHours] = useState(String(Math.round((goalSettings.weeklyMinutes / 60) * 10) / 10));
+  const [monthlyHours, setMonthlyHours] = useState(String(Math.round((goalSettings.monthlyMinutes / 60) * 10) / 10));
+  const [prefStart, setPrefStart] = useState(goalSettings.preferredStart);
+  const [prefEnd, setPrefEnd] = useState(goalSettings.preferredEnd);
+  const [breakMinutes, setBreakMinutes] = useState(String(goalSettings.breakMinutes));
+  const [restDays, setRestDays] = useState<number[]>(goalSettings.weeklyRestDays);
+  const [countLunchAsWork, setCountLunchAsWork] = useState(goalSettings.countLunchAsWork);
+  const [countRestAsWork, setCountRestAsWork] = useState(goalSettings.countRestAsWork);
+  const [goalMsg, setGoalMsg] = useState("");
+  const [newReasonBn, setNewReasonBn] = useState("");
+  const [newReasonEn, setNewReasonEn] = useState("");
+  const [newReasonBusiness, setNewReasonBusiness] = useState(false);
+
+  const handleSaveGoals = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const dMin = Math.max(60, Math.round((Number(dailyHours) || 10) * 60));
+    const wMin = Math.max(60, Math.round((Number(weeklyHours) || 60) * 60));
+    const mMin = Math.max(60, Math.round((Number(monthlyHours) || 260) * 60));
+    await putItem("goalSettings", {
+      ...goalSettings,
+      dailyMinutes: dMin,
+      weeklyMinutes: wMin,
+      monthlyMinutes: mMin,
+      preferredStart: prefStart || "09:00",
+      preferredEnd: prefEnd || "21:00",
+      breakMinutes: Math.max(0, Number(breakMinutes) || 0),
+      weeklyRestDays: restDays,
+      countLunchAsWork,
+      countRestAsWork,
+    });
+    await onRefresh();
+    setGoalMsg(lang === "bn" ? "কর্মঘণ্টা ও লক্ষ্য সেটিংস সংরক্ষিত হয়েছে।" : "Work hours & goal settings saved.");
+  };
+
+  const handleAddReason = async () => {
+    if (!newReasonBn.trim() && !newReasonEn.trim()) return;
+    await putItem("outsideReasons", {
+      id: uid("reason"),
+      nameBn: newReasonBn.trim() || newReasonEn.trim(),
+      nameEn: newReasonEn.trim() || newReasonBn.trim(),
+      categoryType: newReasonBusiness ? "BUSINESS" : "PERSONAL",
+      countsAsBusinessTime: newReasonBusiness,
+      isCustom: true,
+    });
+    setNewReasonBn("");
+    setNewReasonEn("");
+    await onRefresh();
+  };
 
   useEffect(() => {
     if (subTab === "ANDROID") {
@@ -232,6 +292,7 @@ export const SettingsView: React.FC<{
       <div className="flex items-center gap-1 p-1 rounded-xl bg-zinc-200/70 dark:bg-zinc-900 overflow-x-auto">
         {(
           [
+            ["GOALS", lang === "bn" ? "কর্মঘণ্টা ও লক্ষ্য" : "Work Hours", Clock],
             ["GENERAL", lang === "bn" ? "সাধারণ" : "General", Sliders],
             ["LOCATION", lang === "bn" ? "দোকান ও জিপিএস" : "Shop & GPS", MapPin],
             ["NOTIFICATIONS", lang === "bn" ? "নোটিফিকেশন" : "Notifications", Bell],
@@ -254,6 +315,257 @@ export const SettingsView: React.FC<{
           </button>
         ))}
       </div>
+
+      {subTab === "GOALS" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <form
+            onSubmit={handleSaveGoals}
+            className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#111714] p-6 space-y-4"
+          >
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-emerald-500" />
+              <h2 className="text-sm font-semibold">
+                {lang === "bn" ? "দৈনিক, সাপ্তাহিক ও মাসিক কর্মঘণ্টা" : "Working Hours & Target Settings"}
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  {lang === "bn" ? "দৈনিক (ঘণ্টা)" : "Daily (hrs)"}
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="1"
+                  max="24"
+                  value={dailyHours}
+                  onChange={(e) => setDailyHours(e.target.value)}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  {lang === "bn" ? "সাপ্তাহিক (ঘণ্টা)" : "Weekly (hrs)"}
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="168"
+                  value={weeklyHours}
+                  onChange={(e) => setWeeklyHours(e.target.value)}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  {lang === "bn" ? "মাসিক (ঘণ্টা)" : "Monthly (hrs)"}
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="744"
+                  value={monthlyHours}
+                  onChange={(e) => setMonthlyHours(e.target.value)}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  {lang === "bn" ? "দোকান খোলার সময়" : "Opening Time"}
+                </label>
+                <input
+                  type="time"
+                  value={prefStart}
+                  onChange={(e) => setPrefStart(e.target.value)}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  {lang === "bn" ? "বন্ধের সময়" : "Closing Time"}
+                </label>
+                <input
+                  type="time"
+                  value={prefEnd}
+                  onChange={(e) => setPrefEnd(e.target.value)}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">
+                  {lang === "bn" ? "বিরতি (মিনিট)" : "Break (min)"}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="240"
+                  value={breakMinutes}
+                  onChange={(e) => setBreakMinutes(e.target.value)}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs text-zinc-500 mb-2">
+                {lang === "bn" ? "সাপ্তাহিক ছুটির দিন" : "Weekly Rest Days"}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  [0, lang === "bn" ? "রবি" : "Sun"],
+                  [1, lang === "bn" ? "সোম" : "Mon"],
+                  [2, lang === "bn" ? "মঙ্গল" : "Tue"],
+                  [3, lang === "bn" ? "বুধ" : "Wed"],
+                  [4, lang === "bn" ? "বৃহঃ" : "Thu"],
+                  [5, lang === "bn" ? "শুক্র" : "Fri"],
+                  [6, lang === "bn" ? "শনি" : "Sat"],
+                ].map(([dayIdx, label]) => {
+                  const idx = Number(dayIdx);
+                  const active = restDays.includes(idx);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() =>
+                        setRestDays((prev) =>
+                          prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx]
+                        )
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                        active
+                          ? "border-emerald-500 bg-emerald-500/15 text-emerald-500"
+                          : "border-zinc-300 dark:border-zinc-700 text-zinc-500"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <label className="flex items-center justify-between p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 cursor-pointer">
+                <span className="text-xs font-medium">
+                  {lang === "bn" ? "দুপুরের খাবার কর্মঘণ্টায় গণনা করুন" : "Count lunch break as business hours"}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={countLunchAsWork}
+                  onChange={(e) => setCountLunchAsWork(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-500"
+                />
+              </label>
+              <label className="flex items-center justify-between p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 cursor-pointer">
+                <span className="text-xs font-medium">
+                  {lang === "bn" ? "বিশ্রাম সময় কর্মঘণ্টায় গণনা করুন" : "Count rest break as business hours"}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={countRestAsWork}
+                  onChange={(e) => setCountRestAsWork(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-500"
+                />
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{lang === "bn" ? "কর্মঘণ্টা সেটিংস সংরক্ষণ করুন" : "Save Working Hours"}</span>
+            </button>
+
+            {goalMsg && <p className="text-xs text-emerald-500">{goalMsg}</p>}
+          </form>
+
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#111714] p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-500" />
+              <h2 className="text-sm font-semibold">
+                {lang === "bn" ? "দোকানের বাইরে যাওয়ার কারণসমূহ" : "Outside Exit Reasons"}
+              </h2>
+            </div>
+
+            <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+              {reasons.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs"
+                >
+                  <div>
+                    <span className="font-semibold">{lang === "bn" ? r.nameBn : r.nameEn}</span>
+                    <span className="text-zinc-400 ml-2">({lang === "bn" ? r.nameEn : r.nameBn})</span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
+                      r.countsAsBusinessTime
+                        ? "bg-emerald-500/15 text-emerald-500"
+                        : "bg-amber-500/15 text-amber-500"
+                    }`}
+                  >
+                    {r.countsAsBusinessTime
+                      ? lang === "bn"
+                        ? "ব্যবসায়িক"
+                        : "Business"
+                      : lang === "bn"
+                        ? "ব্যক্তিগত/বিরতি"
+                        : "Personal"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-2.5">
+              <div className="text-xs font-medium text-zinc-500">
+                {lang === "bn" ? "নতুন কাস্টম কারণ যোগ করুন" : "Add Custom Exit Reason"}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={newReasonBn}
+                  onChange={(e) => setNewReasonBn(e.target.value)}
+                  placeholder={lang === "bn" ? "বাংলা নাম" : "Bengali label"}
+                  className="min-h-[40px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-xs"
+                />
+                <input
+                  type="text"
+                  value={newReasonEn}
+                  onChange={(e) => setNewReasonEn(e.target.value)}
+                  placeholder={lang === "bn" ? "ইংরেজি নাম" : "English label"}
+                  className="min-h-[40px] px-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-transparent text-xs"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newReasonBusiness}
+                  onChange={(e) => setNewReasonBusiness(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-500"
+                />
+                <span>
+                  {lang === "bn" ? "ব্যবসায়িক কর্মঘণ্টায় যোগ হবে" : "Counts as business hours"}
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={handleAddReason}
+                className="w-full min-h-[40px] rounded-xl border border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10 text-xs font-semibold flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{lang === "bn" ? "কারণ যোগ করুন" : "Add Reason"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {subTab === "GENERAL" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

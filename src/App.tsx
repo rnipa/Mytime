@@ -568,7 +568,9 @@ export default function App() {
             <SettingsView
               shop={shop}
               prefs={prefs}
+              goalSettings={goalSettings}
               notifications={notifications}
+              reasons={reasons}
               onRefresh={loadAllData}
             />
           )}
